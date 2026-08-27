@@ -1,0 +1,632 @@
+==================================================
+17. EXISTING BACKEND + TESTING CONTEXT
+==================================================
+
+IMPORTANT:
+The backend is ALREADY implemented and tested successfully.
+
+Do NOT recreate or modify the backend.
+
+CURRENT ARCHITECTURE:
+
+Security Event
+     |
+     v
+API Gateway
+     |
+     v
+AWS Lambda
+     |
+     +------------------+
+     |                  |
+     v                  v
+DynamoDB            Salesforce
+     |
+     v
+Risk Analysis
+
+Amazon Bedrock is planned for the next phase but is currently NOT working
+because the AWS account is still undergoing Bedrock verification.
+
+==================================================
+18. AWS REGION
+==================================================
+
+Current AWS Region:
+
+us-east-1
+
+AWS account contains:
+
+Lambda
+DynamoDB
+API Gateway
+IAM
+Secrets Manager
+Salesforce integration
+
+Current Lambda IAM role:
+
+security-incident-processor-role-0fcrvzgk
+
+Secrets Manager secret:
+
+security/salesforce/integration
+
+==================================================
+19. DYNAMODB
+==================================================
+
+Current DynamoDB table:
+
+SecurityLoginEvents
+
+The Lambda stores security events in this table.
+
+Stored fields include:
+
+eventId
+eventType
+user
+ipAddress
+failedAttempts
+newIp
+newLocation
+newDevice
+impossibleTravel
+suspiciousIp
+riskScore
+severity
+detected
+reasons
+timestamp
+
+==================================================
+20. CURRENT LAMBDA LOGIC
+==================================================
+
+Current risk calculation:
+
+failedAttempts > 5
+    +20
+
+newIp
+    +15
+
+newLocation
+    +20
+
+newDevice
+    +10
+
+impossibleTravel
+    +25
+
+suspiciousIp
+    +30
+
+Maximum score:
+
+100
+
+Severity:
+
+0-30    = LOW
+31-60   = MEDIUM
+61-80   = HIGH
+81-100  = CRITICAL
+
+Detected:
+
+riskScore >= 61
+
+==================================================
+21. CURRENT SUCCESSFUL TEST
+==================================================
+
+A test event was successfully processed.
+
+Input example:
+
+{
+  "eventType": "LOGIN",
+  "user": "john.smith",
+  "ipAddress": "185.100.50.25",
+  "failedAttempts": 8,
+  "newIp": true,
+  "newLocation": true,
+  "newDevice": true,
+  "impossibleTravel": true,
+  "suspiciousIp": true
+}
+
+Current successful response:
+
+{
+  "success": true,
+  "eventId": "EVT-67F0D517",
+  "eventType": "LOGIN",
+  "user": "john.smith",
+  "ipAddress": "185.100.50.25",
+  "timestamp": "2026-08-27T18:06:38.046725+00:00",
+  "securityAnalysis": {
+    "riskScore": 100,
+    "severity": "CRITICAL",
+    "detected": true,
+    "reasons": [
+      "Multiple failed login attempts",
+      "Login from a new IP address",
+      "Login from a new location",
+      "Login from a new device",
+      "Impossible travel detected",
+      "Suspicious IP address"
+    ]
+  },
+  "stored": true,
+  "salesforce": {
+    "incidentCreated": true,
+    "incidentId": "a01g800000g5Wu4AAE"
+  }
+}
+
+This confirms:
+
+Lambda processing = WORKING
+Risk calculation = WORKING
+DynamoDB storage = WORKING
+Salesforce integration = WORKING
+
+==================================================
+22. SALESFORCE
+==================================================
+
+Salesforce My Domain:
+
+orgfarm-73be08d96c-dev-ed.develop.my.salesforce.com
+
+Salesforce API version currently being used:
+
+v65.0
+
+Successful Salesforce endpoint:
+
+POST
+
+/services/data/v65.0/sobjects/Security_Incident1__c/
+
+The Salesforce Security Incident record was successfully created.
+
+Example Salesforce Incident ID:
+
+a01g800000g5Wu4AAE
+
+==================================================
+23. SALESFORCE OAUTH
+==================================================
+
+Salesforce OAuth uses the My Domain URL.
+
+IMPORTANT:
+
+Do NOT use:
+
+https://login.salesforce.com/services/oauth2/token
+
+because this returned:
+
+invalid_grant
+request not supported on this domain
+
+The working token endpoint is:
+
+https://orgfarm-73be08d96c-dev-ed.develop.my.salesforce.com/services/oauth2/token
+
+The OAuth client credentials flow is already configured.
+
+A successful token response contains:
+
+{
+  "access_token": "...",
+  "signature": "...",
+  "scope": "api",
+  "instance_url":
+    "https://orgfarm-73be08d96c-dev-ed.develop.my.salesforce.com",
+  "token_type": "Bearer"
+}
+
+IMPORTANT SECURITY RULE:
+
+Never hardcode the Salesforce access token in frontend code.
+
+Never expose:
+
+client_secret
+access_token
+Salesforce OAuth credentials
+
+in React/Vite frontend code.
+
+==================================================
+24. POSTMAN TESTING
+==================================================
+
+Use Postman to test the backend API before connecting the frontend.
+
+Create a Postman collection:
+
+CyberShield 360 API
+
+Environment variables:
+
+baseUrl
+salesforceBaseUrl
+accessToken
+
+Do NOT hardcode secrets.
+
+==================================================
+25. POSTMAN — SALESFORCE TOKEN
+==================================================
+
+Method:
+
+POST
+
+URL:
+
+{{salesforceBaseUrl}}/services/oauth2/token
+
+Use the Salesforce OAuth client credentials parameters configured in the Salesforce External Client App.
+
+Expected response:
+
+{
+  "access_token": "...",
+  "instance_url": "...",
+  "token_type": "Bearer"
+}
+
+Use the returned access token for Salesforce API testing.
+
+==================================================
+26. POSTMAN — SALESFORCE SECURITY INCIDENT
+==================================================
+
+Method:
+
+POST
+
+URL:
+
+{{salesforceBaseUrl}}/services/data/v65.0/sobjects/Security_Incident1__c/
+
+Headers:
+
+Authorization:
+Bearer {{accessToken}}
+
+Content-Type:
+application/json
+
+The request body should contain the fields required by the
+Security_Incident1__c Salesforce object.
+
+Expected successful response:
+
+{
+  "id": "a01...",
+  "success": true,
+  "errors": []
+}
+
+==================================================
+27. POSTMAN — SECURITY EVENT API
+==================================================
+
+The frontend will eventually call the API Gateway endpoint.
+
+Create this Postman request:
+
+POST
+
+{{baseUrl}}/security-event
+
+IMPORTANT:
+Use the actual API Gateway endpoint once configured.
+
+Example request:
+
+{
+  "eventType": "LOGIN",
+  "user": "john.smith",
+  "ipAddress": "185.100.50.25",
+  "failedAttempts": 8,
+  "newIp": true,
+  "newLocation": true,
+  "newDevice": true,
+  "impossibleTravel": true,
+  "suspiciousIp": true
+}
+
+Expected response:
+
+{
+  "success": true,
+  "eventId": "EVT-XXXXXXXX",
+  "eventType": "LOGIN",
+  "user": "john.smith",
+  "ipAddress": "185.100.50.25",
+  "timestamp": "...",
+  "securityAnalysis": {
+    "riskScore": 100,
+    "severity": "CRITICAL",
+    "detected": true,
+    "reasons": [...]
+  },
+  "stored": true,
+  "salesforce": {
+    "incidentCreated": true,
+    "incidentId": "a01..."
+  }
+}
+
+==================================================
+28. CURL TEST
+==================================================
+
+Equivalent API test:
+
+curl -X POST "{{baseUrl}}/security-event" \
+-H "Content-Type: application/json" \
+-d '{
+  "eventType": "LOGIN",
+  "user": "john.smith",
+  "ipAddress": "185.100.50.25",
+  "failedAttempts": 8,
+  "newIp": true,
+  "newLocation": true,
+  "newDevice": true,
+  "impossibleTravel": true,
+  "suspiciousIp": true
+}'
+
+Expected:
+
+HTTP 200
+
+and:
+
+success = true
+stored = true
+riskScore = 100
+severity = CRITICAL
+detected = true
+salesforce.incidentCreated = true
+
+==================================================
+29. FRONTEND API SERVICE
+==================================================
+
+Create:
+
+src/services/api.js
+
+The frontend must NOT directly call:
+
+DynamoDB
+Salesforce OAuth
+AWS Secrets Manager
+Bedrock
+
+The frontend should only communicate with the backend API.
+
+Example:
+
+export async function createSecurityEvent(data) {
+  const response = await fetch(
+    `${API_BASE_URL}/security-event`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(data)
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Security event API failed");
+  }
+
+  return response.json();
+}
+
+==================================================
+30. FRONTEND ENVIRONMENT VARIABLES
+==================================================
+
+Use:
+
+.env
+
+Example:
+
+VITE_API_BASE_URL=<API_GATEWAY_URL>
+
+Do NOT put:
+
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+SALESFORCE_CLIENT_SECRET
+SALESFORCE_ACCESS_TOKEN
+AWS_SECRET
+Bedrock credentials
+
+inside the frontend environment.
+
+Frontend environment variables are visible to the browser.
+
+==================================================
+31. UI TESTING
+==================================================
+
+After implementing the UI, verify:
+
+1. npm install
+2. npm run dev
+3. Dashboard loads
+4. Sidebar navigation works
+5. Incident table displays mock incidents
+6. Incident details open
+7. Filters work
+8. Risk score displays correctly
+9. Severity badges display correctly
+10. Salesforce status displays correctly
+11. AWS status displays correctly
+12. AI placeholder displays correctly
+13. Responsive layout works
+14. No console errors
+
+==================================================
+32. API INTEGRATION TESTING
+==================================================
+
+Initially:
+
+Frontend → Mock API
+
+After UI is stable:
+
+Frontend → API Gateway → Lambda
+
+Do NOT connect directly to DynamoDB or Salesforce.
+
+Test sequence:
+
+STEP 1:
+Test Lambda directly.
+
+STEP 2:
+Test API Gateway using Postman.
+
+STEP 3:
+Verify DynamoDB record.
+
+STEP 4:
+Verify Salesforce Security Incident.
+
+STEP 5:
+Connect frontend to API Gateway.
+
+STEP 6:
+Trigger a security event from frontend.
+
+STEP 7:
+Verify the response appears in the UI.
+
+==================================================
+33. FUTURE AI INTEGRATION
+==================================================
+
+AI is NOT part of the current frontend implementation.
+
+Current:
+
+Security Event
+    ↓
+Risk Engine
+    ↓
+DynamoDB
+    ↓
+Salesforce
+    ↓
+Frontend
+
+Future:
+
+Security Event
+    ↓
+Risk Engine
+    ↓
+DynamoDB
+    ↓
+AI Analysis
+    ↓
+Amazon Bedrock
+    ↓
+AI Explanation
+    ↓
+Recommended Action
+    ↓
+Frontend
+
+The AI section in the UI must therefore be modular.
+
+When Bedrock becomes available, we should be able to replace:
+
+"AI analysis will be available soon"
+
+with:
+
+AI Security Analysis
+
+Summary:
+Suspicious login detected due to multiple risk indicators.
+
+Recommended Action:
+...
+
+Risk Explanation:
+...
+
+==================================================
+34. CURRENT BEDROCK STATUS
+==================================================
+
+Amazon Bedrock is currently blocked for this AWS account.
+
+The error received was:
+
+AccessDeniedException:
+
+"Your account is currently being verified."
+
+Different Bedrock models including:
+- Amazon Nova Micro
+- Amazon Nova Lite
+- Amazon Nova 2 Lite
+- Llama models
+
+also failed.
+
+Therefore:
+
+DO NOT spend time implementing Bedrock in this UI phase.
+
+Show:
+
+Amazon Bedrock
+Status: Pending Verification
+
+==================================================
+35. FINAL DEVELOPMENT RULE
+==================================================
+
+Do not modify the existing working backend.
+
+Frontend development should be completely independent.
+
+Priority:
+
+1. Attractive UI
+2. Mock data
+3. Incident dashboard
+4. Incident details
+5. Filters
+6. Integration status
+7. API service layer
+8. Postman-compatible API integration
+9. Real backend connection
+10. AI integration later
+
+The UI should be production-style but the implementation should remain simple.
